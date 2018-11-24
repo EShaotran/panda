@@ -1,3 +1,12 @@
+What's Changed?
+======
+Added Remote Control (RC) support for Toyota Prius Prime.
+
+Want to make your car RC-able? Plug your computer into your panda, and run panda/RC_Toyota/RC_Toyota.py to begin.
+
+WASD to move/steer, ESC to stop. You can stop the computer control at any time by pressing the brake pedal on your car.
+
+
 Welcome to panda
 ======
 
