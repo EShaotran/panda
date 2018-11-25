@@ -14,71 +14,6 @@ import select
 import realtime
 from cereal import log
 
-# MAKE_CAN_MSG (REF'D END OF CREATE_STEER/ACCEL)
-# #Combines a msg and addr into one data structure
-# def fix(msg, addr):
-#   checksum = 0
-#   idh = (addr & 0xff00) >> 8
-#   idl = (addr & 0xff)
-
-#   checksum = idh + idl + len(msg) + 1
-#   for d_byte in msg:
-#     checksum += ord(d_byte)
-#   #return msg + chr(checksum & 0xFF)
-#   return msg + struct.pack("B", checksum & 0xFF)
-
-# def make_can_msg(addr, dat, alt, cks=False):
-#   if cks:
-#     dat = fix(dat, addr)
-#   return [addr, 0, dat, alt]
-
-
-# CAN_LIST_TO_CANCAPNP (REF'D END OF MAIN)
-def new_message():
-  dat = log.Event.new_message()
-  dat.logMonoTime = int(realtime.sec_since_boot() * 1e9)
-  return dat
-
-def can_list_to_can_capnp(can_msgs, msgtype='can'): #from boardd>boardd.py
-  dat = new_message()
-  dat.init(msgtype, len(can_msgs))
-  for i, can_msg in enumerate(can_msgs):
-    if msgtype == 'sendcan':
-      cc = dat.sendcan[i]
-    else:
-      cc = dat.can[i]
-    print("Addr"+can_msg[0])
-    print("busTime"+str(can_msg[1]))
-    print("dat"+str(can_msg[2]))
-    print("src"+str(can_msg[3]))
-    cc.address = "hi" #can_msg[0]
-    cc.busTime = can_msg[1]
-    cc.dat = str(can_msg[2])
-    cc.src = can_msg[3]
-  return dat
-
-#ETHAN: A general way to send steering commands to CAN. I need to use this if I want to steer.
-def create_steer_command(packer, steer, steer_req, raw_cnt):
-  """Creates a CAN message for the Toyota Steer Command."""
-
-  values = {
-    "STEER_REQUEST": steer_req,
-    "STEER_TORQUE_CMD": steer,
-    "COUNTER": raw_cnt,
-    "SET_ME_1": 1,
-  }
-  return packer.make_can_msg("STEERING_LKA", 0, values)
-
-#ETHAN: A general way to send acceleration/(hopefully deceleration) commands to CAN. I need to use this for driving.
-def create_accel_command(packer, accel, pcm_cancel, standstill_req):
-  values = {
-    "ACCEL_CMD": accel,
-    "SET_ME_X63": 0x63,
-    "SET_ME_1": 1,
-    "RELEASE_STANDSTILL": not standstill_req,
-    "CANCEL_REQ": pcm_cancel,
-  }
-  return packer.make_can_msg("ACC_CONTROL", 0, values)
 
 #getTorque(), getAccel() - REF'D IN MAIN() - Constantly update
 def calc_checksum(data, length):
@@ -206,32 +141,19 @@ def getKeys():
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 panda = None
-pker = None
 def main():
-  # global panda
-  # panda = Panda()
-  # panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
-  # panda.can_clear(0)
-
-  pker = CANPacker ("toyota_prius_2017_pt_generated.dbc")
+  global panda
+  panda = Panda()
+  panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
+  panda.can_clear(0)
 
   thread = Thread(target = getKeys)
   thread.start()
 
-  raw_cnt = 0;
-  while 1:
-    can_sends = []
-    
+  while 1:    
     tq = getTorque()
-    can_sends.append(create_steer_command(pker, 1, raw_cnt)) #packer, steer, steer_req, raw_cnt)
-    raw_cnt += 1
-
     acc = getAccel()
-    can_sends.append(create_accel_command(pker, True, True)) #packer, accel, pcm_cancel, standstill_req
-    #standstill_req is a boolean that determines if the PCM will be asked to fubar stop and go without a Pedal. It tells the pcm the car has stopped and to toss up the nag message about tapping the pedal or cruise lever to continue.
-    #print(can_sends)
-    #panda.can_send(can_list_to_can_capnp(can_sends, msgtype='sendcan').to_bytes())
-    test = can_list_to_can_capnp(can_sends, msgtype='sendcan').to_bytes()
+
 
 
 
