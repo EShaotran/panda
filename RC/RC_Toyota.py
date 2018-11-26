@@ -10,6 +10,7 @@ from threading import Thread
 import termios
 import tty
 import select
+from hexdump import hexdump
 
 def send(addr, dat):
   global panda
@@ -30,15 +31,15 @@ def sendAccel():
     accRate = 10
   else:
     accRate = 0
-  send(0x343, str(accRate)) #m/s2, "ACC_CONTROL"
+  send(0x343, hex(accRate)) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL)
 
 def sendBrake():
   global goBrake
   threading.Timer(0.01, sendBrake).start()
   brakeval = 0
   if goBrake:
-    brakeval = 50
-  send (0xA6, str(brakeval))
+    brakeval = 125
+  send (0xA6, hex(brakeval)) #0x226 (brake_module), 0xA6 (brake)
 
 def sendSteer2():
   dat= 0;
@@ -50,7 +51,7 @@ def sendSteer2():
     steer = 32700 + 15000
   else:
     steer = 32700
-  send(0x2E4, str(steer)) #"STEERING_LKA"
+  send(0x167, hex(steer)) # 0x2E4 (STEERING_LKA), 0x266 (STEERING_IPAS), 0x167 (STEERING_IPAS_COMMA)
 
 def calc_checksum(data, length):
   # from http://illmatics.com/Remote%20Car%20Hacking.pdf
@@ -139,19 +140,19 @@ def getKeys():
       if isData():
         c = sys.stdin.read(1)
         if c == 'a':
-          print 'left'
+          #print 'left'
           goLeft = True
           goRight = False
         elif c == 'd':
-          print 'right'
+          #print 'right'
           goRight = True
           goLeft = False
         elif c == 'w':
-          print 'accel'
+          #print 'accel'
           goAccel = True
           goBrake = False
         elif c == 's':
-          print 'brake'
+          #print 'brake'
           goBrake = True
           goAccel = False
         elif c == '\x1b': # x1b = ESC
