@@ -7,15 +7,51 @@ from Measures import Conversions as CV
 from panda import Panda
 import threading
 from threading import Thread
-from can.packer import CANPacker
 import termios
 import tty
 import select
-import realtime
-from cereal import log
 
+def send(addr, dat):
+  global panda
+  panda.can_send(addr, dat, 0)
 
-#getTorque(), getAccel() - REF'D IN MAIN() - Constantly update
+def sendGear(): #0 "P" 1 "R" 2 "N" 3 "D" 4 "B"
+  global goAccel, goBrake, goRight, goLeft
+  gr = 0 #P
+  if goAccel or goBrake or goRight or goLeft:
+    gr = 3
+  send(0x127, str(gr))
+
+def sendAccel():
+  dat= 0;
+  global goAccel
+  threading.Timer(0.01, sendAccel).start()
+  if goAccel:
+    accRate = 10
+  else:
+    accRate = 0
+  send(0x343, str(accRate)) #m/s2, "ACC_CONTROL"
+
+def sendBrake():
+  global goBrake
+  threading.Timer(0.01, sendBrake).start()
+  brakeval = 0
+  if goBrake:
+    brakeval = 50
+  send (0xA6, str(brakeval))
+
+def sendSteer2():
+  dat= 0;
+  global goRight, goLeft
+  threading.Timer(0.01, sendSteer2).start()
+  if goLeft:
+    steer = 32700 - 15000
+  elif goRight:
+    steer = 32700 + 15000
+  else:
+    steer = 32700
+  send(0x2E4, str(steer)) #"STEERING_LKA"
+
 def calc_checksum(data, length):
   # from http://illmatics.com/Remote%20Car%20Hacking.pdf
   end_index = length - 1
@@ -49,12 +85,12 @@ def calc_checksum(data, length):
       shift = shift >> 1
   return ~checksum & 0xFF
 
-#TODO: Find if Toyota Prius Prime uses 1024 as center
 counter = 0
 torque = 0
-def getTorque():  # every 0.01 seconds
+def sendSteer():  # every 0.01 seconds
   global counter, torque
   global goLeft, goRight
+  threading.Timer(0.01, sendSteer).start()
   start = [0x14, 00, 00, 00]  # 0x04 if too slow, 0x14 if LKAS enabled.
   # The 0x04 makes up the high nibble of 1024 (0x04 0x00) for a straight-steer.
   if goLeft or goRight:
@@ -72,23 +108,7 @@ def getTorque():  # every 0.01 seconds
   dat = start + [counter]
   dat = dat + [calc_checksum(dat, len(dat)+1)]  # checksum len include checksum itself
   counter = (counter + 0x10) % 0x100
-  return dat
-
-
-def getAccel():
-  global goAccel, goBrake
-  if goAccel:
-    accRate = 0.05
-    # goBrake = False
-    # mph = getMPH() #m/s
-    # if mph<(10*0.44704): #10mph in M/S form
-    #   accRate = 0.1
-  elif goBrake:
-    accRate = -0.1
-  else:
-    accRate = 0
-
-  return accRate #m/s2
+  send("STEERING_LKA", str(bytearray(dat)))
 
 
 def getMPH():
@@ -136,7 +156,6 @@ def getKeys():
           goAccel = False
         elif c == '\x1b': # x1b = ESC
           return
-
   finally:
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
@@ -150,10 +169,10 @@ def main():
   thread = Thread(target = getKeys)
   thread.start()
 
-  while 1:    
-    tq = getTorque()
-    acc = getAccel()
-
+  sendGear()
+  sendSteer2()
+  sendAccel()
+  sendBrake()
 
 
 
