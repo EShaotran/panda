@@ -3,7 +3,6 @@
 #--Ethan Shaotran--
 
 import sys
-from Measures import Conversions as CV
 from panda import Panda
 import threading
 from threading import Thread
@@ -11,6 +10,8 @@ import termios
 import tty
 import select
 from hexdump import hexdump
+
+KPH_to_MPH = 0.621371
 
 def send(addr, dat):
   global panda
@@ -24,14 +25,23 @@ def sendGear(): #0 "P" 1 "R" 2 "N" 3 "D" 4 "B"
   send(0x127, str(gr))
 
 def sendAccel():
-  dat= 0;
-  global goAccel
+  global goAccel, goBrake
   threading.Timer(0.01, sendAccel).start()
   if goAccel:
-    accRate = 10
+    accRate = 1.0
+  elif goBrake:
+    accRate = -0.5
   else:
     accRate = 0
-  send(0x343, hex(accRate)) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL)
+
+  values = {
+    "ACCEL_CMD": hex(accRate),
+    "SET_ME_X63": 0x63,
+    "SET_ME_1": 0x1,
+    "RELEASE_STANDSTILL": 0x0, #0,1
+    "CANCEL_REQ": 0x1, #0,1
+  }
+  send(0x343, values) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL), 0x200 (GAS_COMMAND)
 
 def sendBrake():
   global goBrake
@@ -39,11 +49,18 @@ def sendBrake():
   brakeval = 0
   if goBrake:
     brakeval = 125
-  send (0xA6, hex(brakeval)) #0x226 (brake_module), 0xA6 (brake)
 
+  values = {
+    "BRAKE_PRESSURE": brakeval,
+    "BRAKE_POSITION": brakeval,
+    "BRAKE_PRESSED": 0x1, #0,1
+  }
+  send (0x226, values) #0x226 (brake_module), 0xA6 (brake)
+
+cnter = 0
 def sendSteer2():
-  dat= 0;
-  global goRight, goLeft
+  global goRight, goLeft, cnter
+  cnter+=1
   threading.Timer(0.01, sendSteer2).start()
   if goLeft:
     steer = 32700 - 15000
@@ -51,7 +68,14 @@ def sendSteer2():
     steer = 32700 + 15000
   else:
     steer = 32700
-  send(0x167, hex(steer)) # 0x2E4 (STEERING_LKA), 0x266 (STEERING_IPAS), 0x167 (STEERING_IPAS_COMMA)
+
+  values = {
+    "STEER_REQUEST": 0x1, #0,1
+    "STEER_TORQUE_CMD": hex(steer),
+    "COUNTER": hex(cnter),
+    "SET_ME_1": 0x1,
+  }
+  send(0x2E4, values) #0x2E4 (STEERING_LKA), 0x266 (STEERING_IPAS), 0x167 (STEERING_IPAS_COMMA)
 
 def calc_checksum(data, length):
   # from http://illmatics.com/Remote%20Car%20Hacking.pdf
@@ -111,15 +135,12 @@ def sendSteer():  # every 0.01 seconds
   counter = (counter + 0x10) % 0x100
   send("STEERING_LKA", str(bytearray(dat)))
 
-
-def getMPH():
-  cp = interface.get_params()
-  v_FL = cp.vl["WHEEL_SPEEDS"]['WHEEL_SPEED_FL'] * CV.KPH_TO_MS
-  v_FR = cp.vl["WHEEL_SPEEDS"]['WHEEL_SPEED_FR'] * CV.KPH_TO_MS
-  v_RL = cp.vl["WHEEL_SPEEDS"]['WHEEL_SPEED_RL'] * CV.KPH_TO_MS
-  v_RR = cp.vl["WHEEL_SPEEDS"]['WHEEL_SPEED_RR'] * CV.KPH_TO_MS
-  v_car = float(np.mean([v_FL, v_FR, v_RL, v_RR]))
-  return v_car #m/s
+MPH = 0
+def updateMPH(dat):
+  global MPH
+  #MPH = int(dat,16) * KPH_to_MPH
+  MPH = dat
+  print(MPH)
 
 goLeft = False
 goRight = False
@@ -167,15 +188,22 @@ def main():
   panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
   panda.can_clear(0)
 
-  thread = Thread(target = getKeys)
-  thread.start()
+  vals = [0.8, 0x63, 0x1, 0x0, 0x1]
+  send(0x343, vals)
 
-  sendGear()
-  sendSteer2()
-  sendAccel()
-  sendBrake()
+  # thread = Thread(target = getKeys)
+  # thread.start()
 
+  # #sendGear()
+  # sendSteer2()
+  # sendAccel()
+  # #sendBrake()
 
+  # while True:
+  #   can_recv = panda.can_recv()
+  #   for address, _, dat, src in can_recv:
+  #     if src == 0 and address == 0xB4:
+  #       updateMPH(dat) #kph
 
 if __name__ == "__main__":
   main()
