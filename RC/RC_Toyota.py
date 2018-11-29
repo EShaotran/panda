@@ -28,9 +28,9 @@ def sendAccel():
   global goAccel, goBrake
   threading.Timer(0.01, sendAccel).start()
   if goAccel:
-    accRate = 1.0
+    accRate = 3000  #-20k to 20k
   elif goBrake:
-    accRate = -0.5
+    accRate = -4000
   else:
     accRate = 0
 
@@ -41,7 +41,10 @@ def sendAccel():
     "RELEASE_STANDSTILL": 0x0, #0,1
     "CANCEL_REQ": 0x1, #0,1
   }
-  send(0x343, values) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL), 0x200 (GAS_COMMAND)
+  values = [hex(accRate), 0x63, 0x1, 0x1, 0x0]
+  #[accRate >> 8, accRate && 0xff, 0x63, 0x1, 0x0, 0x1]
+
+  send(0x343, str(bytearray(values))) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL), 0x200 (GAS_COMMAND)
 
 def sendBrake():
   global goBrake
@@ -70,11 +73,12 @@ def sendSteer2():
     steer = 32700
 
   values = {
-    "STEER_REQUEST": 0x1, #0,1
-    "STEER_TORQUE_CMD": hex(steer),
-    "COUNTER": hex(cnter),
-    "SET_ME_1": 0x1,
+    "STEER_REQUEST": bin(0x1), #0,1
+    "STEER_TORQUE_CMD": bin(steer),
+    "COUNTER": bin(cnter),
+    "SET_ME_1": bin(0x1),
   }
+  values = '\x01\x3E8\x01\x01'
   send(0x2E4, values) #0x2E4 (STEERING_LKA), 0x266 (STEERING_IPAS), 0x167 (STEERING_IPAS_COMMA)
 
 def calc_checksum(data, length):
@@ -161,19 +165,19 @@ def getKeys():
       if isData():
         c = sys.stdin.read(1)
         if c == 'a':
-          #print 'left'
+          print 'left'
           goLeft = True
           goRight = False
         elif c == 'd':
-          #print 'right'
+          print 'right'
           goRight = True
           goLeft = False
         elif c == 'w':
-          #print 'accel'
+          print 'accel'
           goAccel = True
           goBrake = False
         elif c == 's':
-          #print 'brake'
+          print 'brake'
           goBrake = True
           goAccel = False
         elif c == '\x1b': # x1b = ESC
@@ -188,16 +192,18 @@ def main():
   panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
   panda.can_clear(0)
 
-  vals = [0.8, 0x63, 0x1, 0x0, 0x1]
-  send(0x343, vals)
+  # while 1:
+  #   vals = [0x3E8, 0x63, 0x1, 0x0, 0x1]
+  #   valstr = '\x3E8\x63\x01\x00\x01'
+  #   send(0x343, valstr)
 
-  # thread = Thread(target = getKeys)
-  # thread.start()
+  thread = Thread(target = getKeys)
+  thread.start()
 
-  # #sendGear()
-  # sendSteer2()
-  # sendAccel()
-  # #sendBrake()
+  #sendGear()
+  sendSteer2()
+  sendAccel()
+  #sendBrake()
 
   # while True:
   #   can_recv = panda.can_recv()
