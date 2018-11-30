@@ -24,13 +24,15 @@ def sendGear(): #0 "P" 1 "R" 2 "N" 3 "D" 4 "B"
     gr = 3
   send(0x127, str(gr))
 
+acc_cntr = 0
 def sendAccel():
-  global goAccel, goBrake
+  global goAccel, goBrake, acc_cntr
+  acc_cntr +=1
   threading.Timer(0.01, sendAccel).start()
   if goAccel:
-    accRate = 3000  #-20k to 20k
+    accRate = 350  #-20k to 20k
   elif goBrake:
-    accRate = -4000
+    accRate = -300
   else:
     accRate = 0
 
@@ -40,8 +42,9 @@ def sendAccel():
     "SET_ME_1": 0x1,
     "RELEASE_STANDSTILL": 0x0, #0,1
     "CANCEL_REQ": 0x1, #0,1
+    "CHECKSUM": hex(acc_cntr),
   }
-  values = [hex(accRate), 0x63, 0x1, 0x1, 0x0]
+  values = [accRate, 0x63, 0x1, 0x1, 0x0, acc_cntr]
   #[accRate >> 8, accRate && 0xff, 0x63, 0x1, 0x0, 0x1]
 
   send(0x343, str(bytearray(values))) #m/s2, 0x343 (ACC_CONTROL), 0x245 (GAS_PEDAL), 0x200 (GAS_COMMAND)
@@ -60,9 +63,9 @@ def sendBrake():
   }
   send (0x226, values) #0x226 (brake_module), 0xA6 (brake)
 
-cnter = 0
+str_cntr = 0
 def sendSteer2():
-  global goRight, goLeft, cnter
+  global goRight, goLeft, str_cntr
   cnter+=1
   threading.Timer(0.01, sendSteer2).start()
   if goLeft:
@@ -75,7 +78,7 @@ def sendSteer2():
   values = {
     "STEER_REQUEST": bin(0x1), #0,1
     "STEER_TORQUE_CMD": bin(steer),
-    "COUNTER": bin(cnter),
+    "COUNTER": bin(str_cntr),
     "SET_ME_1": bin(0x1),
   }
   values = '\x01\x3E8\x01\x01'
